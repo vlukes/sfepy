@@ -65,7 +65,7 @@ def post_process(out, problem, state, extend=False):
     strain = problem.evaluate('ev_shell10x_strain.i.Omega(u)', mode='el_avg')
     out['strain'] = Struct(name='output_data', mode='cell', data=strain)
 
-    stress = problem.evaluate('ev_shell10x_stress.i.Omega(m.D, m.drill, u)',
+    stress = problem.evaluate('ev_shell10x_stress.i.Omega(m.D, u)',
                               mode='el_avg')
     out['stress'] = Struct(name='output_data', mode='cell', data=stress)
 

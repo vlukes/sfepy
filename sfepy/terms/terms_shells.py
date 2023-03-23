@@ -299,11 +299,10 @@ class Shell10XStressTerm(Shell10XStrainTerm):
         - parameter : :math:`\ul{w}`
     """
     name = 'ev_shell10x_stress'
-    arg_types = ('material_d', 'material_drill', 'parameter')
-    arg_shapes = {'material_d': '6, 6', 'material_drill': '.: 1',
-                  'parameter': 6}
+    arg_types = ('material_d', 'parameter')
+    arg_shapes = {'material_d': '6, 6', 'parameter': 6}
 
-    def get_fargs(self, mtx_d, drill, parameter,
+    def get_fargs(self, mtx_d, parameter,
                   mode=None, term_mode=None, diff_var=None, **kwargs):
         from sfepy.discrete.variables import create_adof_conn
 
@@ -326,7 +325,7 @@ class Shell10XStressTerm(Shell10XStrainTerm):
 
         return stress, geo, fmode
 
-    def get_eval_shape(self, mtx_d, drill, parameter, mode=None,
+    def get_eval_shape(self, mtx_d, parameter, mode=None,
                        term_mode=None, diff_var=None, **kwargs):
         n_el, n_qp, dim, _, _ = self.get_data_shape(parameter)
 
