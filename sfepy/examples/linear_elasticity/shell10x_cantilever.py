@@ -25,7 +25,7 @@ View the results using::
   sfepy-view shell10x.vtk -f u_disp:wu_disp 1:vw
 """
 from __future__ import absolute_import
-from sfepy.base.base import output
+from sfepy.base.base import output, Struct
 from sfepy.discrete.fem.meshio import UserMeshIO
 from sfepy.discrete import Integral
 import sfepy.mechanics.shell10x as sh
@@ -48,6 +48,7 @@ poisson = 0.3
 # Loading force.
 force = -1.0
 
+
 def mesh_hook(mesh, mode):
     """
     Generate the beam mesh.
@@ -56,9 +57,17 @@ def mesh_hook(mesh, mode):
         mesh = sci.make_mesh(dims[:2], shape, transform=transform)
         return mesh
 
+
 def post_process(out, problem, state, extend=False):
     u = problem.get_variables()['u']
     gamma2 = problem.domain.regions['Gamma2']
+
+    strain = problem.evaluate('ev_shell10x_strain.i.Omega(u)', mode='el_avg')
+    out['strain'] = Struct(name='output_data', mode='cell', data=strain)
+
+    stress = problem.evaluate('ev_shell10x_stress.i.Omega(m.D, m.drill, u)',
+                              mode='el_avg')
+    out['stress'] = Struct(name='output_data', mode='cell', data=stress)
 
     dofs = u.get_state_in_region(gamma2)
     output('DOFs along the loaded edge:')
@@ -80,6 +89,7 @@ options = {
     'nls' : 'newton',
     'ls' : 'ls',
     'post_process_hook' : 'post_process',
+    'output_dir': './output',
 }
 
 if transform is None:
