@@ -138,7 +138,13 @@ class Shell10XTerm(Term):
         Get physical quadrature points corresponding to the term region
         and integral.
         """
-        mapping, _ = self.get_mapping(self.get_virtual_variable())
+
+        if 'parameter' in self.ats:
+            var = self.get_parameter_variables()[0]
+        else:
+            var = self.get_virtual_variable()
+
+        mapping, _ = self.get_mapping(var)
 
         qp_coors, _ = self.integral.get_qp('')
         phys_qps = mapping.get_physical_qps(qp_coors)
@@ -190,7 +196,7 @@ class Shell10XTerm(Term):
                            k12.transpose(0, 2, 1))
 
         if drill != 0.0:
-            coefs =  mtx_dr[..., 3, 3].mean(1) * geo.volume * drill
+            coefs = mtx_dr[..., 3, 3].mean(1) * geo.volume * drill
             mtx_k = shell10x.lock_drilling_rotations(mtx_k, geo.ebs, coefs)
 
         # DOFs in mtx_k are DOF-by-DOF. Transform is u and phi node-by-node.
@@ -201,3 +207,130 @@ class Shell10XTerm(Term):
         fmode = diff_var is not None
 
         return (mtx_k, el_u, fmode)
+
+
+class Shell10XStrainTerm(Shell10XTerm):
+    r"""
+    Evaluate strain tensor.
+
+    For detailed information about this shell element see
+    the Shell10XTerm class docstring.
+
+    The symmetric storage is used, so that in 3D it has 6 components with
+    the ordering :math:`[11, 22, 33, 12, 13, 23]`, in 2D it has 3 components
+    with the ordering :math:`[11, 22, 12]`. The non-diagonal components are
+    doubled - engineering shear strain.
+
+    :Definition:
+
+    .. math::
+        \int_{\Omega} \ull{e}(\ul{w})
+
+    :Arguments:
+        - parameter : :math:`\ul{w}`
+    """
+    name = 'ev_shell10x_strain'
+    arg_types = ('parameter',)
+    arg_shapes = {'parameter': 6}
+
+    @staticmethod
+    def function(out, strain, geo, fmode):
+        if fmode == 2:
+            out[:] = strain
+        else:
+            out[:, 0, ...] = (strain *
+                (geo.det * geo.qp.weights)[..., None, None]).sum(1)
+
+        if fmode == 1:
+            out /= geo.volume[:, None, None, None]
+
+        return 0
+
+    def get_fargs(self, parameter,
+                  mode=None, term_mode=None, diff_var=None, **kwargs):
+        from sfepy.discrete.variables import create_adof_conn
+
+        geo, _ = self.get_mapping(parameter)
+
+        # Displacements of element nodes.
+        vec_u = parameter()
+        econn = parameter.field.get_econn('cell', self.region)
+        adc = create_adof_conn(nm.arange(parameter.n_dof, dtype=nm.int32),
+                               econn, 6, 0)
+        el_u = vec_u[adc]
+
+        dsg = shell10x.get_dsg_strain(geo.coors_loc, geo.qp.vals)
+        mtx_b = shell10x.create_strain_matrix(geo.bfgm, geo.dxidx, dsg)
+
+        strain = ddot(mtx_b, el_u[:, None, :, None], 'AB')
+
+        fmode = {'eval': 0, 'el_avg': 1, 'qp': 2}.get(mode, 1)
+
+        return strain, geo, fmode
+
+    def get_eval_shape(self, parameter, mode=None,
+                       term_mode=None, diff_var=None, **kwargs):
+        n_el, n_qp, dim, _, _ = self.get_data_shape(parameter)
+
+        if mode != 'qp':
+            n_qp = 1
+
+        return (n_el, n_qp, dim * (dim + 1) // 2, 1), parameter.dtype
+
+
+class Shell10XStressTerm(Shell10XStrainTerm):
+    r"""
+    Evaluate stress tensor.
+
+    For detailed information about this shell element see
+    the Shell10XTerm class docstring.
+
+    The symmetric storage is used, so that in 3D it has 6 components with
+    the ordering :math:`[11, 22, 33, 12, 13, 23]`, in 2D it has 3 components
+    with the ordering :math:`[11, 22, 12]`.
+
+    :Definition:
+
+    .. math::
+        \int_{\cal{D}} D_{ijkl} e_{kl}(\ul{w})
+
+    :Arguments:
+        - material  : :math:`D_{ijkl}`
+        - parameter : :math:`\ul{w}`
+    """
+    name = 'ev_shell10x_stress'
+    arg_types = ('material_d', 'material_drill', 'parameter')
+    arg_shapes = {'material_d': '6, 6', 'material_drill': '.: 1',
+                  'parameter': 6}
+
+    def get_fargs(self, mtx_d, drill, parameter,
+                  mode=None, term_mode=None, diff_var=None, **kwargs):
+        from sfepy.discrete.variables import create_adof_conn
+
+        geo, _ = self.get_mapping(parameter)
+
+        # Displacements of element nodes.
+        vec_u = parameter()
+        econn = parameter.field.get_econn('cell', self.region)
+        adc = create_adof_conn(nm.arange(parameter.n_dof, dtype=nm.int32),
+                               econn, 6, 0)
+        el_u = vec_u[adc]
+
+        dsg = shell10x.get_dsg_strain(geo.coors_loc, geo.qp.vals)
+        mtx_b = shell10x.create_strain_matrix(geo.bfgm, geo.dxidx, dsg)
+        mtx_dr = shell10x.rotate_elastic_tensor(mtx_d, geo.bfu, geo.ebs)
+
+        stress = ddot(ddot(mtx_dr, mtx_b), el_u[:, None, :, None])
+
+        fmode = {'eval': 0, 'el_avg': 1, 'qp': 2}.get(mode, 1)
+
+        return stress, geo, fmode
+
+    def get_eval_shape(self, mtx_d, drill, parameter, mode=None,
+                       term_mode=None, diff_var=None, **kwargs):
+        n_el, n_qp, dim, _, _ = self.get_data_shape(parameter)
+
+        if mode != 'qp':
+            n_qp = 1
+
+        return (n_el, n_qp, dim * (dim + 1) // 2, 1), parameter.dtype
