@@ -850,3 +850,42 @@ class ElasticWaveCauchyTerm(Term):
             fmode = 1
 
         return out_qp, geo, fmode
+
+
+class LinearSpringTerm(Term):
+    name = 'dw_lin_spring'
+    arg_types = ('material', 'virtual', 'state')
+    arg_shapes = {'material': '.: 1', 'virtual': ('D', 'state'),
+                  'state': 'D'}
+
+    @staticmethod
+    def function(out, stiffness, vec, diff_var):
+        dim = out.shape[-2] // 2
+        if diff_var is None:
+            aux = nm.array([-1, 1]) * stiffness
+            for k in nm.arange(dim) * dim:
+                du = (vec[:, k] - vec[:, k + 1])[:, None]
+                out[:, 0, k:(k + 2), 0] = aux * du
+
+        else:
+            eye = nm.eye(2 * dim, 2 * dim, dtype=nm.float64)
+            eye.shape = (1, 1) + eye.shape
+            out[...] = - stiffness * eye
+            for k in nm.arange(dim) * dim:
+                out[..., k, k + 1] = out[..., k + 1, k] = stiffness
+
+        return 0
+
+    def get_fargs(self, mat, virtual, state,
+                  mode=None, term_mode=None, diff_var=None, **kwargs):
+
+        if diff_var is None:
+            from sfepy.discrete.variables import create_adof_conn
+            econn = virtual.field.get_econn('cell', self.region)
+            _, _, _, _, n_c = self.get_data_shape(virtual)
+            adc = create_adof_conn(nm.arange(state.n_dof, dtype=nm.int32),
+                                   econn, n_c, 0)
+
+            return mat, state()[adc], diff_var
+        else:
+            return mat, None, diff_var
