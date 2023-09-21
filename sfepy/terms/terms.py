@@ -727,7 +727,6 @@ class Term(Struct):
 
         all_vars = self.get_variables()
 
-        dc_type = self.get_dof_conn_type()
         tgs = self.get_geometry_types()
 
         v_tg = None
@@ -780,7 +779,7 @@ class Term(Struct):
                            has_virtual=True,
                            has_state=True,
                            trace_region=trace_region,
-                           dc_type=dc_type,
+                           dof_conn_type=self.dof_conn_type,
                            v_tg=v_tg,
                            ps_tg=ps_tg,
                            region=region,
@@ -803,7 +802,7 @@ class Term(Struct):
                            has_virtual=vvar is not None,
                            has_state=False,
                            trace_region=trace_region,
-                           dc_type=dc_type,
+                           dof_conn_type=self.dof_conn_type,
                            v_tg=v_tg,
                            ps_tg=ps_tg,
                            region=region,
@@ -818,7 +817,7 @@ class Term(Struct):
                            has_virtual=True,
                            has_state=False,
                            trace_region=None,
-                           dc_type=dc_type,
+                           dof_conn_type=self.dof_conn_type,
                            v_tg=v_tg,
                            ps_tg=v_tg,
                            region=region,
@@ -959,10 +958,6 @@ class Term(Struct):
             The required geometry types for each variable argument.
         """
         return self.geometry_types
-
-    def get_dof_conn_type(self):
-        return Struct(name='dof_conn_info', type=self.dof_conn_type,
-                      region_name=self.region.name)
 
     def get_assembling_cells(self, shape=None):
         """
@@ -1534,8 +1529,8 @@ class Term(Struct):
         import sfepy.discrete.common.extmods.assemble as asm
 
         vvar = self.get_virtual_variable()
-        dc_type = self.get_dof_conn_type()
-
+        rname = self.region.name
+        dct = self.dof_conn_type
         extra = None
 
         if mode == 'vector':
@@ -1550,7 +1545,7 @@ class Term(Struct):
                         val[ii] = nm.complex128(val[ii])
 
             if not isinstance(val, tuple):
-                dc = vvar.get_dof_conn(dc_type)
+                dc = vvar.get_dof_conn(rname, dct)
                 assert_(val.shape[2] == dc.shape[1])
 
                 assemble(asm_obj, val, iels, 1.0, dc)
@@ -1591,10 +1586,10 @@ class Term(Struct):
                     sign = 0.0
 
             if not isinstance(val, tuple):
-                rdc = vvar.get_dof_conn(dc_type)
+                rdc = vvar.get_dof_conn(rname, dct)
 
                 trace_region = self.arg_trace_regions[svar.name]
-                cdc = svar.get_dof_conn(dc_type, trace_region)
+                cdc = svar.get_dof_conn(rname, dct, trace_region)
                 assert_(val.shape[2:] == (rdc.shape[1], cdc.shape[1]))
 
                 assemble(tmd[0], tmd[1], tmd[2], val, iels, sign, rdc, cdc)
