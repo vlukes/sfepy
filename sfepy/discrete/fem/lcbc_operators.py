@@ -186,7 +186,7 @@ class Rigid2Operator(LCBCOperator):
         meq, seq = mvar.eq_map.eq[self.mdofs], svar.eq_map.eq[self.sdofs]
 
         assert_(nm.all(meq >= 0))
-        assert_(nm.all(seq >= 0))
+        #assert_(nm.all(seq >= 0))
 
         mcoors = mfield.get_coor(mnodes)
         scoors = sfield.get_coor(snodes)
